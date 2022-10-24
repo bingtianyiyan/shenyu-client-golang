@@ -4,6 +4,7 @@ go 1.17
 
 require (
 	github.com/hashicorp/consul/api v1.13.1
+	github.com/hashicorp/go-uuid v1.0.1
 	github.com/nacos-group/nacos-sdk-go v1.1.1
 	github.com/pkg/errors v0.9.1
 	github.com/samuel/go-zookeeper v0.0.0-20201211165307-7117e9ea2414

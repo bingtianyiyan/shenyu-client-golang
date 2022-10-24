@@ -15,24 +15,12 @@
  * limitations under the License.
  */
 
-package utils
+package model
 
 /**
-* Build context path string.
-**/
-func  BuildContextPathRemovePrefix(contextPath string,appName string) string {
-	if contextPath == ""{
-	  return RepairData(appName)
-	}
-	return RepairData(contextPath)
-}
-
-/**
-* Build real node string.
-**/
-func BuildRealNodeRemovePrefix(contextPath string,appName string) string {
-	if contextPath == ""{
-		return RemovePrefix(appName)
-	}
-	return RemovePrefix(contextPath)
+ * The ConsulMetaDataRegister
+ **/
+type ConsulMetaDataRegister struct {
+	ServiceId      string            `json:"serviceId"`
+	ShenYuMetaData *MetaDataRegister `json:"metaData"`
 }

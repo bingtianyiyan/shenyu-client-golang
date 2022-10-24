@@ -18,19 +18,18 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/apache/shenyu-client-golang/clients/zk_client"
 	"github.com/apache/shenyu-client-golang/common/constants"
 	"github.com/apache/shenyu-client-golang/common/shenyu_sdk_client"
 	"github.com/apache/shenyu-client-golang/model"
-	"github.com/stretchr/testify/assert"
-	"testing"
 	"time"
 )
 
-/**
- * TestInitZkClient
- **/
-func TestInitZkClient(t *testing.T) {
+func main() {
+
+	//Create ShenYuZkClient  start
 	zcp := &zk_client.ZkClientParam{
 		ZkServers: []string{"127.0.0.1:2181"}, //require user provide
 		ZkRoot:    "/api",                     //require user provide
@@ -39,32 +38,15 @@ func TestInitZkClient(t *testing.T) {
 	sdkClient := shenyu_sdk_client.GetFactoryClient(constants.ZOOKEEPER_CLIENT)
 	client, createResult, err := sdkClient.NewClient(zcp)
 
-	assert.NotNil(t, client)
-	assert.True(t, createResult)
-	assert.Nil(t, err)
-	zc := client.(*zk_client.ShenYuZkClient)
-	defer zc.Close()
-}
-
-/**
- * TestRegisterServiceInstanceAndGetServiceInstanceInfo
- **/
-func TestRegisterServiceInstanceAndGetServiceInstanceInfo(t *testing.T) {
-	zcp := &zk_client.ZkClientParam{
-		ZkServers: []string{"127.0.0.1:2181"}, //require user provide
-		ZkRoot:    "/api",                     //require user provide
+	if !createResult && err != nil {
+		fmt.Printf("Create ShenYuZkClient error : %v", err)
 	}
 
-	sdkClient := shenyu_sdk_client.GetFactoryClient(constants.ZOOKEEPER_CLIENT)
-	client, createResult, err := sdkClient.NewClient(zcp)
-
-	assert.NotNil(t, client)
-	assert.True(t, createResult)
-	assert.Nil(t, err)
-
 	zc := client.(*zk_client.ShenYuZkClient)
 	defer zc.Close()
+	//Create ShenYuZkClient end
 
+	//RegisterServiceInstance start
 	//init MetaDataRegister
 	metaData1 := &model.MetaDataRegister{
 		AppName: "testMetaDataRegister1", //require user provide
@@ -92,86 +74,89 @@ func TestRegisterServiceInstanceAndGetServiceInstanceInfo(t *testing.T) {
 
 	//register multiple metaData
 	registerResult1, err := zc.RegisterServiceInstance(metaData1)
-	assert.Nil(t, err)
-	assert.True(t, registerResult1)
+	if !registerResult1 && err != nil {
+		fmt.Printf("Register zk Instance error : %v", err)
+	}
 
 	registerResult2, err := zc.RegisterServiceInstance(metaData2)
-	assert.Nil(t, err)
-	assert.True(t, registerResult2)
+	if !registerResult2 && err != nil {
+		fmt.Printf("Register zk Instance error : %v", err)
+	}
 
 	registerResult3, err := zc.RegisterServiceInstance(metaData3)
-	assert.Nil(t, err)
-	assert.True(t, registerResult3)
+	if !registerResult3 && err != nil {
+		fmt.Printf("Register zk Instance error : %v", err)
+	}
+	//RegisterServiceInstance end
 
 	time.Sleep(time.Second)
 
+	//GetServiceInstanceInfo start
 	instanceDetail, err := zc.GetServiceInstanceInfo(metaData1)
-	assert.NotNil(t, instanceDetail)
-	assert.Nil(t, err)
+	nodes1, ok := instanceDetail.([]*model.MetaDataRegister)
+	if !ok {
+		fmt.Printf("get zk client metaData error %v:", err)
+	}
+
+	//range nodes
+	for index, node := range nodes1 {
+		nodeJson, err := json.Marshal(node)
+		if err == nil {
+			fmt.Printf("GetNodesInfo ,success Index %v,%v", index, string(nodeJson))
+		}
+	}
 
 	instanceDetail2, err := zc.GetServiceInstanceInfo(metaData2)
-	assert.NotNil(t, instanceDetail2)
-	assert.Nil(t, err)
+	nodes2, ok := instanceDetail2.([]*model.MetaDataRegister)
+	if !ok {
+		fmt.Printf("get zk client metaData error %v:", err)
+	}
+
+	//range nodes1
+	for index, node := range nodes2 {
+		nodeJson, err := json.Marshal(node)
+		if err == nil {
+			fmt.Printf("GetNodesInfo ,success Index %v,%v", index, string(nodeJson))
+		}
+	}
 
 	instanceDetail3, err := zc.GetServiceInstanceInfo(metaData3)
-	assert.NotNil(t, instanceDetail3)
-	assert.Nil(t, err)
-}
-
-/**
-* TestRegisterInstanceAndDeregisterServiceInstance
-**/
-func TestDeregisterServiceInstance(t *testing.T) {
-	zcp := &zk_client.ZkClientParam{
-		ZkServers: []string{"127.0.0.1:2181"}, //require user provide
-		ZkRoot:    "/api",                     //require user provide
+	nodes3, ok := instanceDetail3.([]*model.MetaDataRegister)
+	if !ok {
+		fmt.Printf("get zk client metaData error %v:", err)
 	}
 
-	sdkClient := shenyu_sdk_client.GetFactoryClient(constants.ZOOKEEPER_CLIENT)
-	client, createResult, err := sdkClient.NewClient(zcp)
-
-	assert.NotNil(t, client)
-	assert.True(t, createResult)
-	assert.Nil(t, err)
-
-	zc := client.(*zk_client.ShenYuZkClient)
-	//defer zc.Close()
-
-	//init MetaDataRegister
-	metaData1 := &model.MetaDataRegister{
-		AppName: "testMetaDataRegister1", //require user provide
-		Path:    "your/path1",            //require user provide
-		Enabled: true,                    //require user provide
-		Host:    "127.0.0.1",             //require user provide
-		Port:    "8080",                  //require user provide
+	for index, node := range nodes3 {
+		nodeJson, err := json.Marshal(node)
+		if err == nil {
+			fmt.Printf("GetNodesInfo ,success Index %v,%v", index, string(nodeJson))
+		}
 	}
+	//GetServiceInstanceInfo end
 
-	metaData2 := &model.MetaDataRegister{
-		AppName: "testMetaDataRegister2", //require user provide
-		Path:    "your/path2",            //require user provide
-		Enabled: true,                    //require user provide
-		Host:    "127.0.0.1",             //require user provide
-		Port:    "8181",                  //require user provide
-	}
-
-	metaData3 := &model.MetaDataRegister{
-		AppName: "testMetaDataRegister3", //require user provide
-		Path:    "your/path3",            //require user provide
-		Enabled: true,                    //require user provide
-		Host:    "127.0.0.1",             //require user provide
-		Port:    "8282",                  //require user provide
-	}
-
+	//DeregisterServiceInstance start
+	//your can chose to invoke,not require
+	fmt.Printf("> DeregisterServiceInstance start")
 	deRegisterResult1, err := zc.DeregisterServiceInstance(metaData1)
-	assert.Nil(t, err)
-	assert.True(t, deRegisterResult1)
+	if err != nil {
+		panic(err)
+	}
 
 	deRegisterResult2, err := zc.DeregisterServiceInstance(metaData2)
-	assert.Nil(t, err)
-	assert.True(t, deRegisterResult2)
+	if err != nil {
+		panic(err)
+	}
 
 	deRegisterResult3, err := zc.DeregisterServiceInstance(metaData3)
-	assert.Nil(t, err)
-	assert.True(t, deRegisterResult3)
+	if err != nil {
+		panic(err)
+	}
+
+	if deRegisterResult1 && deRegisterResult2 && deRegisterResult3 {
+		fmt.Printf("DeregisterServiceInstance success !")
+	}
+	//DeregisterServiceInstance end
+
+	//do your logic
 
 }

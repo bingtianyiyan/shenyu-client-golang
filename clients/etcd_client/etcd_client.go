@@ -21,7 +21,6 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/apache/shenyu-client-golang/common/constants"
-	"github.com/apache/shenyu-client-golang/common/utils"
 	"github.com/apache/shenyu-client-golang/model"
 	"github.com/sirupsen/logrus"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -36,21 +35,20 @@ var (
  * ShenYuEtcdClient
  **/
 type ShenYuEtcdClient struct {
-	Ecp *EtcdClientParam //EtcdClientParam
-    EtcdClient *clientv3.Client //EtcdClient
-    GlobalLease clientv3.LeaseID //global lease
+	Ecp        *EtcdClientParam //EtcdClientParam
+	EtcdClient *clientv3.Client //EtcdClient
+	// GlobalLease clientv3.LeaseID //global lease
 }
 
 /**
  * EtcdClientParam
  **/
 type EtcdClientParam struct {
-	ServerList  []string //the customer etcd server address
-	UserName string //the customer etcd server userName
-	Password  string    //the customer etcd server pwd
-	TTL int64 //the customer etcd key rent
+	EtcdServers []string //the customer etcd server address
+	UserName    string   //the customer etcd server userName
+	Password    string   //the customer etcd server pwd
+	TTL         int64    //the customer etcd key rent
 }
-
 
 /**
  * init NewClient
@@ -60,130 +58,107 @@ func (sec *ShenYuEtcdClient) NewClient(clientParam interface{}) (client interfac
 	if !ok {
 		logger.Fatalf("The clientParam  must not nil!")
 	}
-	if len(ecp.ServerList) > 0 {
+	if len(ecp.EtcdServers) > 0 {
 		//use customer param to create client
 		client, err := clientv3.New(clientv3.Config{
-			Endpoints:   ecp.ServerList,
-			DialTimeout: constants.DEFAULT_ETCD_CLIENT_TIMEOUT * time.Second,
+			Endpoints:   ecp.EtcdServers,
+			DialTimeout: constants.DEFAULT_ETCD_TIMEOUT * time.Second,
 			Username:    ecp.UserName,
 			Password:    ecp.Password,
 		})
 		if err == nil {
 			logger.Infof("Create customer etcd client success!")
-			//get leaseId
-			var leaseId,err = genLeaseId(client,ecp.TTL)
-			if err != nil{
-				return nil,false,err
-			}
-			//rent leaseId
-			go func() {
-				keepAlive(client,leaseId)
-			}()
 			return &ShenYuEtcdClient{
 				Ecp: &EtcdClientParam{
-					ServerList: ecp.ServerList,
-					UserName: ecp.UserName,
-					Password: ecp.Password,
-					TTL: ecp.TTL,
+					EtcdServers: ecp.EtcdServers,
+					UserName:    ecp.UserName,
+					Password:    ecp.Password,
+					TTL:         ecp.TTL,
 				},
 				EtcdClient: client,
-				GlobalLease: leaseId,
 			}, true, nil
 		}
-		logger.Fatalf("init etcd client error %+v:", err)
+		logger.Fatalf("init etcd client error %v:", err)
 	}
 	return
 }
 
 /**
-PersistInterface
+DeregisterServiceInstance
 */
-func (sec *ShenYuEtcdClient) PersistInterface(metaData interface{})(registerResult bool, err error){
-	var metadata,ok =  metaData.(*model.MetaDataRegister)
+func (sec *ShenYuEtcdClient) DeregisterServiceInstance(metaData interface{}) (deRegisterResult bool, err error) {
+	mdr, ok := metaData.(*model.MetaDataRegister)
 	if !ok {
-		logger.Fatalf("get etcd client metaData error %+v:", err)
+		logger.Fatalf("get etcd client metaData error %v:", err)
 	}
-	utils.BuildMetadataDto(metadata)
-	var contextPath = utils.BuildRealNodeRemovePrefix(metadata.ContextPath, metadata.AppName)
-	var metadataNodeName = utils.BuildMetadataNodeName(*metadata)
-	var metaDataPath = utils.BuildMetaDataParentPath(metadata.RPCType, contextPath)
-	var realNode = utils.BuildRealNode(metaDataPath, metadataNodeName)
-	var metadataStr,_ = json.Marshal(metadata)
-	err = sec.putEphemeral(realNode,metadataStr)
-	if err != nil{
-		return false,err
+	key := mdr.AppName
+	ctx, cancel := context.WithTimeout(context.Background(), constants.DEFAULT_ETCD_TIMEOUT*time.Second)
+	defer cancel()
+	_, err = sec.EtcdClient.Delete(ctx, key)
+	if err != nil {
+		return false, err
 	}
-	logger.Infof("%s etcd client register success: %s",metadata.RPCType,metadataStr)
-	return true,nil
-}
-
-/**
-PersistURI
-*/
-func (sec *ShenYuEtcdClient) PersistURI(uriRegisterData interface{})(registerResult bool, err error){
-	uriRegister,ok := uriRegisterData.(*model.URIRegister)
-	if !ok {
-		logger.Fatalf("get etcd client uriregister error %+v:", err)
-	}
-	var contextPath = utils.BuildRealNodeRemovePrefix(uriRegister.ContextPath, uriRegister.AppName)
-	var uriNodeName = utils.BuildURINodeName(*uriRegister)
-	var uriPath = utils.BuildURIParentPath(uriRegister.RPCType, contextPath)
-	var realNode = utils.BuildRealNode(uriPath, uriNodeName)
-	var nodeData,_ = json.Marshal(uriRegister)
-	err = sec.putEphemeral(realNode, nodeData)
-    if err != nil{
-    	return false, err
-	}
-	logger.Infof("RegisterServiceInstance,result:%+v", true)
 	return true, nil
 }
 
 /**
-Close
-*/
-func (sec *ShenYuEtcdClient) Close(){
+* RegisterServiceInstance
+ */
+func (sec *ShenYuEtcdClient) GetServiceInstanceInfo(metaData interface{}) (instances interface{}, err error) {
+	mdr := sec.checkCommonParam(metaData, err)
+	key := mdr.AppName
+	var nodes []*model.MetaDataRegister
+	ctx, cancel := context.WithTimeout(context.Background(), constants.DEFAULT_ETCD_TIMEOUT*time.Second)
+	defer cancel()
+	resp, err := sec.EtcdClient.Get(ctx, key)
+	if err != nil {
+		logger.Error("etcd Get data failure, err:", err)
+		return nil, err
+	}
+	node := new(model.MetaDataRegister)
+	err = json.Unmarshal(resp.Kvs[0].Value, node)
+	if err != nil {
+		return nil, err
+	}
+	nodes = append(nodes, node)
+	return nodes, nil
+}
+
+/**
+* RegisterServiceInstance
+ **/
+func (sec *ShenYuEtcdClient) RegisterServiceInstance(metaData interface{}) (registerResult bool, err error) {
+	mdr := sec.checkCommonParam(metaData, err)
+	data, _ := json.Marshal(metaData)
+	if err != nil {
+		return false, err
+	}
+	key := mdr.AppName
+	ctx, cancel := context.WithTimeout(context.Background(), constants.DEFAULT_ETCD_TIMEOUT*time.Second)
+	defer cancel()
+	_, err = sec.EtcdClient.Put(ctx, key, string(data))
+	if err != nil {
+		logger.Errorf("RegisterServiceInstance failure! ,error is :%v", err)
+		return false, err
+	}
+	logger.Infof("RegisterServiceInstance,result:%v", true)
+	return true, nil
+}
+
+/**
+ * check common MetaDataRegister
+ **/
+func (sec *ShenYuEtcdClient) checkCommonParam(metaData interface{}, err error) *model.MetaDataRegister {
+	mdr, ok := metaData.(*model.MetaDataRegister)
+	if !ok {
+		logger.Fatalf("get etcd client metaData error %v:", err)
+	}
+	return mdr
+}
+
+/**
+ * close etcdClient
+ **/
+func (sec *ShenYuEtcdClient) Close() {
 	sec.EtcdClient.Close()
 }
-
-/**
- put data with leaseID,so you should generate leaseId use GenLeaseId()
- */
-func (sec *ShenYuEtcdClient) putEphemeral(key string,val []byte) error{
-	ctx, cancel := context.WithTimeout(context.Background(),constants.DEFAULT_ETCD_CLIENT_TIMEOUT* time.Second)
-	defer cancel()
-	var _,err = sec.EtcdClient.KV.Put(ctx,key,string(val),clientv3.WithLease(sec.GlobalLease))
-	return err
-}
-
-/**
-* genLeaseId //get etcd  grant leaseId
-**/
-func  genLeaseId(client *clientv3.Client,ttl int64) (clientv3.LeaseID,error) {
-	ctx, cancel := context.WithTimeout(context.Background(),constants.DEFAULT_ETCD_CLIENT_TIMEOUT* time.Second)
-	defer cancel()
-	//grant lease
-	lease, err := client.Grant(ctx, ttl)
-	if err != nil {
-		logger.Errorf("Grant lease failed: %v\n", err)
-		return 0,err
-	}
-	return lease.ID,nil
-}
-
-
-/**
-* KkeepAlive
- */
-func  keepAlive(client *clientv3.Client,leaseId clientv3.LeaseID)  {
-	//keep alive
-	kaCh, err := client.KeepAlive(context.Background(), leaseId)
-	if err != nil {
-		logger.Errorf("Keep alive with lease[%v] failed: %v\n",leaseId, err)
-		return
-	}
-	for {
-		<-kaCh
-	}
-}
-
-

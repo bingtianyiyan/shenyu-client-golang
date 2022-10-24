@@ -19,14 +19,10 @@ package zk_client
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/apache/shenyu-client-golang/common/constants"
-	"github.com/apache/shenyu-client-golang/common/utils"
 	"github.com/apache/shenyu-client-golang/model"
 	"github.com/samuel/go-zookeeper/zk"
 	"github.com/sirupsen/logrus"
-	"strings"
-	"sync"
 	"time"
 )
 
@@ -40,18 +36,15 @@ var (
 type ShenYuZkClient struct {
 	ZkClient *zk.Conn       // ZkClient
 	Zcp      *ZkClientParam //client param
-	NodeDataMap *sync.Map
-	MasterWatch <- chan zk.Event
 }
 
 /**
  * ZkClientParam
  **/
 type ZkClientParam struct {
-	ServerList []string //  ex: 127.0.0.1
-    Digest  string //zk user
+	ZkServers []string // ZkServers ex: 127.0.0.1
+	ZkRoot    string   // zkClient Root
 }
-
 
 /**
  * init NewClient
@@ -61,211 +54,178 @@ func (zc *ShenYuZkClient) NewClient(clientParam interface{}) (client interface{}
 	if !ok {
 		logger.Fatalf("The clientParam  must not nil!")
 	}
-	//event
-	eventCallbackOption := zk.WithEventCallback(callback)
-	conn, watchEventChan, err := zk.Connect(zcp.ServerList, time.Duration(constants.DEFAULT_ZOOKEEPER_CLIENT_TIME)*time.Second,eventCallbackOption)
-	if err != nil {
-		logger.Errorf("zk connect fail %+v",err)
-		return &ShenYuZkClient{}, false, err
+	//client = new(ShenYuZkClient)
+	if len(zcp.ZkRoot) == 0 {
+		logger.Fatalf("The param zkRoot must set a value!")
 	}
-	if zcp.Digest != ""{
-		err = conn.AddAuth("digest",[]byte(zcp.Digest))
-		if err != nil{
-			logger.Errorf("zk digest fail %+v",err)
+	conn, _, err := zk.Connect(zcp.ZkServers, time.Duration(constants.DEFAULT_ZOOKEEPER_CLIENT_TIME)*time.Second)
+	if err != nil {
+		if err := zc.ensureRoot(); err != nil {
+			zc.Close()
 			return &ShenYuZkClient{}, false, err
 		}
 	}
 	return &ShenYuZkClient{
 		Zcp: &ZkClientParam{
-			ServerList: zcp.ServerList,
-			Digest: zcp.Digest,
+			ZkRoot:    zcp.ZkRoot,
+			ZkServers: zcp.ZkServers,
 		},
 		ZkClient: conn,
-		NodeDataMap: new(sync.Map),
-		MasterWatch: watchEventChan,
 	}, true, nil
 }
 
 /**
-PersistInterface
-*/
-func (zc *ShenYuZkClient) PersistInterface(metaData interface{})(registerResult bool, err error){
-	var metadata,ok =  metaData.(*model.MetaDataRegister)
+ * DeregisterServiceInstance
+ **/
+func (zc *ShenYuZkClient) DeregisterServiceInstance(metaData interface{}) (deRegisterResult bool, err error) {
+	mdr, ok := metaData.(*model.MetaDataRegister)
 	if !ok {
-		logger.Fatalf("get zookeeper client metaData error %+v:", err)
+		logger.Fatalf("get zk client metaData error %v:", err)
 	}
-	utils.BuildMetadataDto(metadata)
-	var contextPath = utils.BuildRealNodeRemovePrefix(metadata.ContextPath, metadata.AppName)
-	var metadataNodeName = utils.BuildMetadataNodeName(*metadata)
-	var metaDataPath = utils.BuildMetaDataParentPath(metadata.RPCType, contextPath)
-	var realNode = utils.BuildRealNode(metaDataPath, metadataNodeName)
-
-	// create node with mode per
-	err = zc.createNodeWithParent(metaDataPath, nil, zk.WorldACL(zk.PermAll), 0)
-    if err != nil{
-    	return false, err
-	}
-	var metadataStr,_ = json.Marshal(metadata)
-	err = zc.createNodeOrUpdate(realNode, metadataStr,zk.WorldACL(zk.PermAll), 0)
-	if err != nil{
+	if err := zc.ensureName(mdr.AppName); err != nil {
 		return false, err
 	}
-	logger.Infof("%s zookeeper client register success: %s",metadata.RPCType,metadataStr)
-	return true,nil
+	path := zc.Zcp.ZkRoot + "/" + mdr.AppName
+	childs, stat, err := zc.ZkClient.Children(path)
+	if err != nil {
+		return false, err
+	}
+	for _, child := range childs {
+		fullPath := path + "/" + child
+		err := zc.ZkClient.Delete(fullPath, stat.Version)
+		if err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 /**
-PersistURI
-*/
-func (zc *ShenYuZkClient) PersistURI(uriRegisterData interface{})(registerResult bool, err error){
-	uriRegister,ok := uriRegisterData.(*model.URIRegister)
-	if !ok {
-		logger.Fatalf("get zookeeper client uriregister error %+v:", err)
+ * GetServiceInstanceInfo
+ **/
+func (zc *ShenYuZkClient) GetServiceInstanceInfo(metaData interface{}) (instances interface{}, err error) {
+	mdr := zc.checkCommonParam(metaData, err)
+	path := zc.Zcp.ZkRoot + "/" + mdr.AppName
+	var nodes []*model.MetaDataRegister
+	data, _, err := zc.ZkClient.Get(path)
+	if err != nil {
+		logger.Fatalf("zk Get node failure, err  %v:", err)
 	}
-	var contextPath = utils.BuildRealNodeRemovePrefix(uriRegister.ContextPath,uriRegister.AppName)
-	var uriNodeName = utils.BuildURINodeName(*uriRegister)
-	var uriPath = utils.BuildURIParentPath(uriRegister.RPCType, contextPath)
-	var realNode = utils.BuildRealNode(uriPath, uriNodeName)
-	err = zc.createNodeWithParent(uriPath, nil, zk.WorldACL(zk.PermAll), 0)
-    if err != nil{
-    	return false, err
+	node := new(model.MetaDataRegister)
+	err = json.Unmarshal(data, node)
+	if err != nil {
+		return nil, err
 	}
-	var nodeData,_ = json.Marshal(uriRegister)
-	//set dic
-	zc.NodeDataMap.Store(realNode,nodeData)
-	//createMode FlagEphemeral=1 if session DisConnect will delete
-	err = zc.createNodeOrUpdate(realNode,nodeData,zk.WorldACL(zk.PermAll),zk.FlagEphemeral)
-	if err != nil{
+	nodes = append(nodes, node)
+	return nodes, nil
+}
+
+/**
+ * GetEphemeralServiceInstanceInfo
+ **/
+func (zc *ShenYuZkClient) GetEphemeralServiceInstanceInfo(metaData interface{}) (instances interface{}, err error) {
+	mdr := zc.checkCommonParam(metaData, err)
+	path := zc.Zcp.ZkRoot + "/" + mdr.AppName
+	childs, _, err := zc.ZkClient.Children(path)
+	if err != nil {
+		if err == zk.ErrNoNode {
+			return []*model.MetaDataRegister{}, nil //default return empty MetaDataRegister
+		}
+		return nil, err
+	}
+	var nodes []*model.MetaDataRegister
+	for _, child := range childs {
+		fullPath := path + "/" + child
+		data, _, err := zc.ZkClient.Get(fullPath)
+		if err != nil {
+			if err == zk.ErrNoNode {
+				continue
+			}
+			return nil, err
+		}
+		node := new(model.MetaDataRegister)
+		err = json.Unmarshal(data, node)
+		if err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, node)
+	}
+	return nodes, nil
+}
+
+/**
+ * RegisterNodeInstance zk node
+ **/
+func (zc *ShenYuZkClient) RegisterServiceInstance(metaData interface{}) (registerResult bool, err error) {
+	mdr := zc.checkCommonParam(metaData, err)
+	err = zc.ensureRoot()
+	if err != nil {
+		logger.Fatalf("ensureRoot failure, err  %v:", err)
+	}
+	path := zc.Zcp.ZkRoot + "/" + mdr.AppName
+	data, err := json.Marshal(metaData)
+	if err != nil {
+		return false, err
+	}
+	_, err = zc.ZkClient.Create(path, data, 0, zk.WorldACL(zk.PermAll))
+	if err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
 /**
-Close
-*/
-func (zc *ShenYuZkClient) Close(){
+ * check common MetaDataRegister
+ **/
+func (zc *ShenYuZkClient) checkCommonParam(metaData interface{}, err error) *model.MetaDataRegister {
+	mdr, ok := metaData.(*model.MetaDataRegister)
+	if !ok {
+		logger.Fatalf("get zk client metaData error %v:", err)
+	}
+	return mdr
+}
+
+/**
+ * close zkClient
+ **/
+func (zc *ShenYuZkClient) Close() {
 	zc.ZkClient.Close()
 }
 
-/*
- global zk event callback
- */
-func callback(event zk.Event) {
-	//masterWatch <- event
-	//fmt.Println("###########################")
-	//fmt.Println("path: ", event.Path)
-	//fmt.Println("type: ", event.Type.String())
-	//fmt.Println("state: ", event.State.String())
-	//fmt.Println("---------------------------")
+/**
+ * ensure zkRoot avoid create error
+ **/
+func (zc *ShenYuZkClient) ensureRoot() error {
+	exists, _, err := zc.ZkClient.Exists(zc.Zcp.ZkRoot)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		_, err := zc.ZkClient.Create(zc.Zcp.ZkRoot, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		if err != nil && err != zk.ErrNodeExists {
+			return err
+		}
+	}
+	return nil
 }
 
 /**
-WatchEventHandler
-**/
-func(zc *ShenYuZkClient) WatchEventHandler(){
-	for {
-		for event := range zc.MasterWatch{
-			if event.State == zk.StateConnected || event.State == zk.StateConnectedReadOnly{
-				if zc.NodeDataMap != nil {
-					zc.NodeDataMap.Range(func(k ,v interface{}) bool{
-						key, _ := k.(string)
-						val, _ := v.([]byte)
-						logger.Infof("watch change %s",key)
-						var exists,_,_ =zc.ZkClient.Exists(key)
-						if !exists {
-							err := zc.createNodeOrUpdate(key, val, zk.WorldACL(zk.PermAll), zk.FlagEphemeral)
-							if err != nil{
-								logger.Errorf("watch eventHandler CreateNodeOrUpdate err:%+v",err)
-							}
-						}
-						return true
-					})
-				}
-			}
+ * ensure zkRoot&nodeName
+ **/
+func (zc *ShenYuZkClient) ensureName(name string) error {
+	path := zc.Zcp.ZkRoot + "/" + name
+	logger.Infof("ensureName check, path is  %v: ->", path)
+	exists, _, err := zc.ZkClient.Exists(path) //avoid create error
+	logger.Infof("ensureName check result is  %v: ->", exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		_, err = zc.ZkClient.Create(path, []byte(""), 0, zk.WorldACL(zk.PermAll))
+		if err != nil && err == zk.ErrNodeExists {
+			logger.Infof("ensureName inner create success")
+			return nil
 		}
 	}
+	return nil
 }
-
-/*
- createNodeWithParent
- */
-func(zc *ShenYuZkClient) createNodeWithParent(path string,data []byte, acl []zk.ACL,createMode int32) error {
-	path = getZooKeeperPath(path)
-	if path != constants.PathSeparator {
-		path = utils.RemoveSuffix(utils.RemovePrefix(path))
-	}
-	tempPath := utils.RepairData(path)
-	var paths = strings.Split(path,constants.PathSeparator)
-	var cur = ""
-	var err error
-	for _,item := range paths {
-	  if item == ""{
-	  	continue
-	  }
-	  cur = fmt.Sprintf("%s%s%s",cur,constants.PathSeparator,item)
-	  var exist,_,_ = zc.ZkClient.Exists(cur)
-	  if exist {
-			continue
-		}
-
-	  if cur == tempPath {
-	    _,err =	zc.ZkClient.Create(cur,data,createMode,acl)
-		} else {
-		 _,err = zc.ZkClient.Create(cur,nil,createMode,acl)
-		}
-	}
-	return err
-}
-
-/**
-  create node or update nodedata
- */
-func(zc *ShenYuZkClient) createNodeOrUpdate(path string,data []byte, acl []zk.ACL,createMode int32) error {
-	path = getZooKeeperPath(path)
-	if path != constants.PathSeparator {
-		path = utils.RemoveSuffix(utils.RemovePrefix(path))
-	}
-	tempPath := utils.RepairData(path)
-	var paths = strings.Split(path,constants.PathSeparator)
-	var cur = ""
-	var err error
-	for _,item := range paths {
-		if item == ""{
-			continue
-		}
-		cur = fmt.Sprintf("%s%s%s",cur,constants.PathSeparator,item)
-		var exist,_,_ = zc.ZkClient.Exists(cur)
-		if exist {
-			if cur == tempPath{
-				_,err = zc.ZkClient.Set(utils.RepairData(path),data,-1)
-			}
-			continue
-		}
-
-		if cur == tempPath {
-			_,err =	zc.ZkClient.Create(cur,data,createMode,acl)
-		} else {
-			_,err = zc.ZkClient.Create(cur,nil,0,acl)
-		}
-	}
-	return err
-}
-
-/*
- check path and return correctPath
- */
-func getZooKeeperPath(path string) string {
-	if path == "" || path == constants.PathSeparator{
-		return constants.PathSeparator
-	}
-	if !strings.HasPrefix(path,constants.PathSeparator){
-		path = fmt.Sprintf("%s%s","/",path)
-	}
-    if strings.HasSuffix(path,constants.PathSeparator){
-    	path = path[0:len([]rune(path)) - 1]
-	}
-   return  path
-}
-
-

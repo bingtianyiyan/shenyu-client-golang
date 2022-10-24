@@ -15,42 +15,11 @@
  * limitations under the License.
  */
 
-package utils
-
-import "strings"
-
-const PRE_FIX  = "/"
+package model
 
 /**
-* Repair data string.
-**/
-func RepairData(name string) string {
-  var result = strings.HasPrefix(name,PRE_FIX)
-  if result{
-  	return name
-  }
-  return PRE_FIX + name
+ * The EtcdMetaDataRegister
+ **/
+type EtcdMetaDataRegister struct {
+	ShenYuMetaData *MetaDataRegister `json:"metaData"`
 }
-
-/**
-* Remove prefix string.
-**/
-func RemovePrefix(name string) string {
-	var result = strings.HasPrefix(name,PRE_FIX)
-	if result{
-		return name[1:]
-	}
-	return name
-}
-
-/*
-remove Suffix /
- */
-func RemoveSuffix(name string) string{
-	var result = strings.HasSuffix(name,PRE_FIX)
-	if result{
-		return name[0:len([]rune(name)) - 1]
-	}
-	return name
-}
-

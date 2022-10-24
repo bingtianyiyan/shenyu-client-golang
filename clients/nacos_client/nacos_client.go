@@ -18,19 +18,11 @@
 package nacos_client
 
 import (
-	"encoding/json"
-	"github.com/apache/shenyu-client-golang/common/constants"
-	"github.com/apache/shenyu-client-golang/common/utils"
-	"github.com/apache/shenyu-client-golang/model"
 	oriNc "github.com/nacos-group/nacos-sdk-go/clients"
-	"github.com/nacos-group/nacos-sdk-go/clients/config_client"
 	"github.com/nacos-group/nacos-sdk-go/clients/naming_client"
 	"github.com/nacos-group/nacos-sdk-go/common/constant"
 	"github.com/nacos-group/nacos-sdk-go/vo"
 	"github.com/sirupsen/logrus"
-	"net"
-	"net/url"
-	"strconv"
 )
 
 var (
@@ -41,21 +33,16 @@ var (
  * ShenYuNacosClient
  **/
 type ShenYuNacosClient struct {
-	NamingClient naming_client.INamingClient
-	ConfigClient config_client.IConfigClient
-	Ncp *NacosClientParam
-	SimpleQueue *utils.SimpleQueue
+	NacosClient *naming_client.NamingClient
 }
 
 /**
  * NacosClientParam
  **/
 type NacosClientParam struct {
-	ServerList  []string
+	IpAddr      string //the nacos server address require user provide
+	Port        uint64 //the nacos server port require user provide
 	NamespaceId string // the namespaceId of Nacos.When namespace is public, fill in the blank string here  require user provide.
-	UserName    string // nacos loginName
-	Password    string // nacos loginPwd
-	GroupName   string // options
 }
 
 /**
@@ -64,146 +51,95 @@ type NacosClientParam struct {
 func (nc *ShenYuNacosClient) NewClient(clientParam interface{}) (client interface{}, createResult bool, err error) {
 	ncp, ok := clientParam.(*NacosClientParam)
 	if !ok {
-		logger.Fatalf("init nacos client error %+v:", err)
+		logger.Fatalf("init nacos client error %v:", err)
 	}
-	if len(ncp.ServerList) == 0{
-		logger.Fatalf("The clientParam ServerList must not nil!")
+	checkResult := len(ncp.IpAddr) > 0 && len(ncp.NamespaceId) > 0 && ncp.Port > 0
+	if checkResult {
+		client, err := ncp.initNacosClient()
+		if err != nil {
+			logger.Fatalf("init nacos client error %v:", err)
+		}
+		return client, true, nil
+	} else {
+		logger.Fatalf("init nacos client param is missing please check")
 	}
-	namingClient,configClient, err := ncp.initNacosClient()
-	if err != nil {
-		logger.Fatalf("init nacos client error %+v:", err)
-	}
-
-	if ncp.GroupName == "" {
-		ncp.GroupName = constants.DEFAULT_NACOS_GROUP_NAME
-	}
-	return &ShenYuNacosClient{
-		Ncp: &NacosClientParam{
-             ServerList: ncp.ServerList,
-             UserName: ncp.UserName,
-             Password: ncp.Password,
-             GroupName: ncp.GroupName,
-		},
-		NamingClient: namingClient,
-        ConfigClient: configClient,
-        SimpleQueue: new(utils.SimpleQueue),
-	}, true, nil
+	return
 }
 
 /**
  * use NacosClientParam to init client
  **/
-func (ncp *NacosClientParam) initNacosClient() (namingClient naming_client.INamingClient,configClient config_client.IConfigClient, err error) {
-	var sc []constant.ServerConfig
-	for _,v := range ncp.ServerList{
-		u, _ := url.Parse(v)
-		host, portStr, _ := net.SplitHostPort(u.Host)
-		//host = fmt.Sprintf("%s://%s",u.Scheme,host)
-		var port,_ = strconv.ParseUint(portStr,10,64)
-		sc = append(sc, *constant.NewServerConfig(host, port))
+func (ncp *NacosClientParam) initNacosClient() (clientProxy naming_client.INamingClient, err error) {
+	sc := []constant.ServerConfig{
+		*constant.NewServerConfig(ncp.IpAddr, ncp.Port),
 	}
 
 	//init ClientConfig
 	cc := *constant.NewClientConfig(
-		//constant.WithUsername(ncp.UserName),
-		//constant.WithPassword(ncp.Password),
 		constant.WithNamespaceId(ncp.NamespaceId),
 		constant.WithTimeoutMs(5000),
 		constant.WithNotLoadCacheAtStart(true),
 		constant.WithLogDir("/tmp/nacos/log"),
 		constant.WithCacheDir("/tmp/nacos/cache"),
-		)
-	if ncp.UserName != "" && ncp.Password != "" {
-		cc.Username = ncp.UserName
-		cc.Username = ncp.Password
-	}
-	namingClient, err = oriNc.NewNamingClient(
+	)
+
+	client, err := oriNc.NewNamingClient(
 		vo.NacosClientParam{
 			ClientConfig:  &cc,
 			ServerConfigs: sc,
 		},
 	)
-	if err != nil{
-		return nil,nil,err
+
+	if err == nil {
+		return client, nil
 	}
-	configClient,err = oriNc.NewConfigClient(
-		vo.NacosClientParam{
-			ClientConfig:  &cc,
-			ServerConfigs: sc,
-		},
-		)
-	if err != nil{
-		return nil,nil,err
-	}
-	return namingClient,configClient,nil
+	return
 }
 
 /**
-PersistInterface
-*/
-func (nc *ShenYuNacosClient) PersistInterface(metaData interface{})(registerResult bool, err error){
-	var metadata,ok =  metaData.(*model.MetaDataRegister)
+ * Register Instance to Nacos
+ **/
+func (nc *ShenYuNacosClient) RegisterServiceInstance(metaData interface{}) (registerResult bool, err error) {
+	rip, ok := metaData.(vo.RegisterInstanceParam)
 	if !ok {
-		logger.Fatalf("get nacos client metaData error %+v:", err)
+		logger.Fatalf("init nacos client error %v:", err)
 	}
-	utils.BuildMetadataDto(metadata)
-	var contextPath = utils.BuildRealNodeRemovePrefix(metadata.ContextPath, metadata.AppName)
-	var metadataStr,_ = json.Marshal(metadata)
-	var configName = utils.BuildServiceConfigPath(metadata.RPCType, contextPath)
-
-	nc.SimpleQueue.QueueAdd(string(metadataStr))
-
-	var set,_ = json.Marshal(nc.SimpleQueue.GetAllQueueData())
-	var param = vo.ConfigParam{
-		DataId: configName,
-		Group: nc.Ncp.GroupName,
-		Content:string(set),
-	}
-	publishResult,err := nc.ConfigClient.PublishConfig(param)
-	if !publishResult{
-		logger.Errorf("nacos register metadata fail,please check: %+v",err)
-		return publishResult,err
-	}
-	logger.Infof("rpcType:%s ->nacos client register success,meta:%s->ruleName:%s",metadata.RPCType,metadataStr,metadata.RuleName)
-	return publishResult,nil
-}
-
-/**
-PersistURI
-*/
-func (nc *ShenYuNacosClient) PersistURI(uriRegisterData interface{})(registerResult bool, err error){
-	uriRegister,ok := uriRegisterData.(*model.URIRegister)
-	if !ok {
-		logger.Fatalf("get nacos client uriregister error %+v:", err)
-	}
-	//required
-	var serviceName = utils.BuildServiceInstancePath(uriRegister.RPCType)
-	var contextPath = utils.BuildRealNodeRemovePrefix(uriRegister.ContextPath, uriRegister.AppName)
-	port, _ := strconv.ParseUint(uriRegister.Port,10,64)
-	uriRegString, _ := json.Marshal(uriRegister)
-    var metaData =  map[string]string{constants.CONTEXT_PATH: contextPath,constants.URI_META_DATA:string(uriRegString)}
-	var param  =  vo.RegisterInstanceParam{
-		ServiceName: serviceName,
-		Weight: 1,
-		Enable: true,
-        Ephemeral: true,
-        Ip: uriRegister.Host,
-        Port: port,
-        Metadata:metaData,
-        GroupName: nc.Ncp.GroupName,
-	}
-	registerResult, err = nc.NamingClient.RegisterInstance(param)
+	registerResult, err = nc.NacosClient.RegisterInstance(rip)
 	if err != nil {
-		logger.Errorf("RegisterServiceInstance failure! ,error is :%+v", err)
-		return false, err
+		logger.Fatalf("RegisterServiceInstance failure! ,error is :%v", err)
 	}
-	logger.Infof("RegisterServiceInstance,result:%+v\n\n,param:%+v \n\n", registerResult, param)
+	logger.Infof("RegisterServiceInstance,result:%v\n\n,param:%v \n\n", registerResult, rip)
 	return registerResult, nil
 }
 
 /**
-Close
-*/
-func (nc *ShenYuNacosClient) Close() {
+ * DeregisterServiceInstance
+ **/
+func (nc *ShenYuNacosClient) DeregisterServiceInstance(metaData interface{}) (deRegisterResult bool, err error) {
+	rip, ok := metaData.(vo.DeregisterInstanceParam)
+	if !ok {
+		logger.Fatalf("init nacos client error %v:", err)
+	}
+	deRegisterResult, err = nc.NacosClient.DeregisterInstance(rip)
+	if err != nil {
+		logger.Fatalf("DeregisterServiceInstance failure! ,error is :%v", err)
+	}
+	logger.Infof("DeregisterServiceInstance,result:%v\n\n,param:%v \n\n", deRegisterResult, rip)
+	return deRegisterResult, nil
+}
 
+/**
+ * GetServiceInstanceInfo
+ **/
+func (nc *ShenYuNacosClient) GetServiceInstanceInfo(metaData interface{}) (instances interface{}, err error) {
+	rip, ok := metaData.(vo.SelectInstancesParam)
+	if !ok {
+		logger.Fatalf("init nacos client error %v:", err)
+	}
+	instances, err = nc.NacosClient.SelectInstances(rip)
+	if err != nil {
+		logger.Fatalf("GetServiceInstanceInfo failure! ,error is :%v", err)
+	}
+	logger.Infof("GetServiceInstanceInfo,result:%v\n\n,param:%v \n\n", instances, rip)
+	return instances, nil
 }

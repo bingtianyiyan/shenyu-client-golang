@@ -37,7 +37,6 @@ type AdminTokenData struct {
 }
 
 type ShenYuAdminClient struct {
-	ServerList string `json:"serverList"`//if use admin_client is required
 	UserName string `json:"userName"` //optional
 	Password string `json:"password"` //optional
 }
