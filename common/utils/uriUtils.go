@@ -15,28 +15,42 @@
  * limitations under the License.
  */
 
-package main
+package utils
 
-import (
-	"fmt"
-	"github.com/apache/shenyu-client-golang/clients"
-	"github.com/apache/shenyu-client-golang/model"
-)
+import "strings"
+
+const PRE_FIX  = "/"
 
 /**
- * The shenyu_admin_client example
- **/
-func main() {
-
-	//init ShenYuAdminClient
-	adminClient := &model.ShenYuAdminClient{
-		UserName: "admin",  //user provide
-		Password: "123456", //user provide
-	}
-
-	adminToken, err := clients.NewShenYuAdminClient(adminClient)
-	if err == nil {
-		fmt.Printf("this is ShenYu Admin client token %v ->", adminToken.AdminTokenData.Token)
-	}
-
+* Repair data string.
+**/
+func RepairData(name string) string {
+  var result = strings.HasPrefix(name,PRE_FIX)
+  if result{
+  	return name
+  }
+  return PRE_FIX + name
 }
+
+/**
+* Remove prefix string.
+**/
+func RemovePrefix(name string) string {
+	var result = strings.HasPrefix(name,PRE_FIX)
+	if result{
+		return name[1:]
+	}
+	return name
+}
+
+/*
+remove Suffix /
+ */
+func RemoveSuffix(name string) string{
+	var result = strings.HasSuffix(name,PRE_FIX)
+	if result{
+		return name[0:len([]rune(name)) - 1]
+	}
+	return name
+}
+

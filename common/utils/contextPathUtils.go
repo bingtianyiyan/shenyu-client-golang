@@ -15,25 +15,24 @@
  * limitations under the License.
  */
 
-package shenyu_sdk_client
-
-//mockgen -destination /mock_***_client.go  -package ***_client -source common/client_interface.go
+package utils
 
 /**
- * common SdkClient interface(except http client)
- **/
-type SdkClient interface {
-	NewClient(clientParam interface{}) (client interface{}, createResult bool, err error)
+* Build context path string.
+**/
+func  BuildContextPathRemovePrefix(contextPath string,appName string) string {
+	if contextPath == ""{
+	  return RepairData(appName)
+	}
+	return RepairData(contextPath)
+}
 
-	DeregisterServiceInstance(metaData interface{}) (deRegisterResult bool, err error)
-
-	GetServiceInstanceInfo(metaData interface{}) (instances interface{}, err error)
-
-	RegisterServiceInstance(metaData interface{}) (registerResult bool, err error)
-
-	PersistInterface(metaData interface{})(registerResult bool, err error)
-
-	PersistURI(uriRegisterData interface{})(registerResult bool, err error)
-
-	Close()
+/**
+* Build real node string.
+**/
+func BuildRealNodeRemovePrefix(contextPath string,appName string) string {
+	if contextPath == ""{
+		return RemovePrefix(appName)
+	}
+	return RemovePrefix(contextPath)
 }

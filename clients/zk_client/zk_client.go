@@ -229,3 +229,16 @@ func (zc *ShenYuZkClient) ensureName(name string) error {
 	}
 	return nil
 }
+
+/*
+ will achive later
+*/
+func (zc *ShenYuZkClient) PersistInterface(metaData interface{}) (registerResult bool, err error) {
+	panic("implement me")
+}
+/*
+ will achive later
+*/
+func (zc *ShenYuZkClient) PersistURI(uriRegisterData interface{}) (registerResult bool, err error) {
+	panic("implement me")
+}

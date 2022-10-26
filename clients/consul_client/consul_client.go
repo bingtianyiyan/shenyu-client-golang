@@ -177,3 +177,22 @@ func (scc *ShenYuConsulClient) checkCommonParam(metaData interface{}, err error)
 	}
 	return mdr
 }
+/*
+ will achive later
+ */
+func (scc *ShenYuConsulClient) PersistInterface(metaData interface{}) (registerResult bool, err error) {
+	panic("implement me")
+}
+/*
+ will achive later
+*/
+func (scc *ShenYuConsulClient) PersistURI(uriRegisterData interface{}) (registerResult bool, err error) {
+	panic("implement me")
+}
+/*
+ will achive later
+*/
+func (scc *ShenYuConsulClient) Close() {
+	panic("implement me")
+}
+

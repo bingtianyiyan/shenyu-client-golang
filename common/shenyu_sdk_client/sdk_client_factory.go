@@ -18,6 +18,7 @@
 package shenyu_sdk_client
 
 import (
+	"github.com/apache/shenyu-client-golang/clients/http_client"
 	"github.com/apache/shenyu-client-golang/clients/consul_client"
 	"github.com/apache/shenyu-client-golang/clients/etcd_client"
 	"github.com/apache/shenyu-client-golang/clients/nacos_client"
@@ -30,6 +31,8 @@ import (
  **/
 func GetFactoryClient(clientName string) SdkClient {
 	switch clientName {
+	case constants.RPCTYPE_HTTP:
+		return &http_client.ShenYuHttpClient{}
 	case constants.NACOS_CLIENT:
 		return &nacos_client.ShenYuNacosClient{}
 	case constants.ZOOKEEPER_CLIENT:

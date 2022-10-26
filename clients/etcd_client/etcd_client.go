@@ -156,6 +156,19 @@ func (sec *ShenYuEtcdClient) checkCommonParam(metaData interface{}, err error) *
 	return mdr
 }
 
+/*
+ will achive later
+*/
+func (sec *ShenYuEtcdClient) PersistInterface(metaData interface{}) (registerResult bool, err error) {
+	panic("implement me")
+}
+/*
+ will achive later
+*/
+func (sec *ShenYuEtcdClient) PersistURI(uriRegisterData interface{}) (registerResult bool, err error) {
+	panic("implement me")
+}
+
 /**
  * close etcdClient
  **/

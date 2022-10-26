@@ -15,25 +15,51 @@
  * limitations under the License.
  */
 
-package shenyu_sdk_client
+package utils
 
-//mockgen -destination /mock_***_client.go  -package ***_client -source common/client_interface.go
+import "sync"
 
 /**
- * common SdkClient interface(except http client)
- **/
-type SdkClient interface {
-	NewClient(clientParam interface{}) (client interface{}, createResult bool, err error)
-
-	DeregisterServiceInstance(metaData interface{}) (deRegisterResult bool, err error)
-
-	GetServiceInstanceInfo(metaData interface{}) (instances interface{}, err error)
-
-	RegisterServiceInstance(metaData interface{}) (registerResult bool, err error)
-
-	PersistInterface(metaData interface{})(registerResult bool, err error)
-
-	PersistURI(uriRegisterData interface{})(registerResult bool, err error)
-
-	Close()
+simple queue struct
+ */
+type SimpleQueue struct {
+	Qs []string
+	Size int
+	Lock sync.Mutex
 }
+
+/*
+* add data
+ */
+func (self *SimpleQueue) QueueAdd(data string) {
+	self.Lock.Lock()
+	defer self.Lock.Unlock()
+	self.Qs = append(self.Qs, data)
+	self.Size += 1
+}
+
+/*
+pop data
+ */
+func (self *SimpleQueue) QueuePop() string {
+	self.Lock.Lock()
+	defer self.Lock.Unlock()
+	if self.Size == 0 {
+		return ""
+	}
+	v := self.Qs[0]
+	self.Qs = self.Qs[1:]
+	self.Size -= 1
+	return v
+}
+
+/*
+* get all queue data
+ */
+func (self *SimpleQueue) GetAllQueueData() []string{
+	self.Lock.Lock()
+	defer self.Lock.Unlock()
+	v := self.Qs
+	return v
+}
+

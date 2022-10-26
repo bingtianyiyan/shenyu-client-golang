@@ -143,3 +143,22 @@ func (nc *ShenYuNacosClient) GetServiceInstanceInfo(metaData interface{}) (insta
 	logger.Infof("GetServiceInstanceInfo,result:%v\n\n,param:%v \n\n", instances, rip)
 	return instances, nil
 }
+
+/*
+ will achive later
+*/
+func (nc *ShenYuNacosClient) PersistInterface(metaData interface{}) (registerResult bool, err error) {
+	panic("implement me")
+}
+/*
+ will achive later
+*/
+func (nc *ShenYuNacosClient) PersistURI(uriRegisterData interface{}) (registerResult bool, err error) {
+	panic("implement me")
+}
+/*
+ will achive later
+*/
+func (nc *ShenYuNacosClient) Close() {
+	panic("implement me")
+}
