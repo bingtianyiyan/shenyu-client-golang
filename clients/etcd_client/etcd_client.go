@@ -62,7 +62,7 @@ func (sec *ShenYuEtcdClient) NewClient(clientParam interface{}) (client interfac
 		//use customer param to create client
 		client, err := clientv3.New(clientv3.Config{
 			Endpoints:   ecp.EtcdServers,
-			DialTimeout: constants.DEFAULT_ETCD_TIMEOUT * time.Second,
+			DialTimeout: constants.DEFAULT_ETCD_CLIENT_TIMEOUT * time.Second,
 			Username:    ecp.UserName,
 			Password:    ecp.Password,
 		})
@@ -92,7 +92,7 @@ func (sec *ShenYuEtcdClient) DeregisterServiceInstance(metaData interface{}) (de
 		logger.Fatalf("get etcd client metaData error %v:", err)
 	}
 	key := mdr.AppName
-	ctx, cancel := context.WithTimeout(context.Background(), constants.DEFAULT_ETCD_TIMEOUT*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), constants.DEFAULT_ETCD_CLIENT_TIMEOUT*time.Second)
 	defer cancel()
 	_, err = sec.EtcdClient.Delete(ctx, key)
 	if err != nil {
@@ -108,7 +108,7 @@ func (sec *ShenYuEtcdClient) GetServiceInstanceInfo(metaData interface{}) (insta
 	mdr := sec.checkCommonParam(metaData, err)
 	key := mdr.AppName
 	var nodes []*model.MetaDataRegister
-	ctx, cancel := context.WithTimeout(context.Background(), constants.DEFAULT_ETCD_TIMEOUT*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), constants.DEFAULT_ETCD_CLIENT_TIMEOUT*time.Second)
 	defer cancel()
 	resp, err := sec.EtcdClient.Get(ctx, key)
 	if err != nil {
@@ -134,7 +134,7 @@ func (sec *ShenYuEtcdClient) RegisterServiceInstance(metaData interface{}) (regi
 		return false, err
 	}
 	key := mdr.AppName
-	ctx, cancel := context.WithTimeout(context.Background(), constants.DEFAULT_ETCD_TIMEOUT*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), constants.DEFAULT_ETCD_CLIENT_TIMEOUT*time.Second)
 	defer cancel()
 	_, err = sec.EtcdClient.Put(ctx, key, string(data))
 	if err != nil {

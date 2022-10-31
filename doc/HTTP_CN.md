@@ -73,7 +73,7 @@ RPCType:     constants.RPCTYPE_HTTP, //需要用户提供
 Host:        "127.0.0.1",            //需要用户提供
 Port:        "8080",                 //需要用户提供
 }
-result, err = hcc.PersistInterface(urlRegister)
+result, err = hcc.PersistURI(urlRegister)
 if err != nil {
 logger.Warnf("UrlRegister has error:", err)
 }
@@ -84,9 +84,10 @@ logger.Infof("finish UrlRegister ,the result is->", result)
 
 **5.完整的成功日志**
 ```go
-2022-05-05 15:43:56 [INFO] [github.com/apache/shenyu-client-golang/clients/admin_client/shenyu_admin_client.go:51] Get ShenYu Admin response, body is -> {200 login dashboard user success {1 admin 1 true 2018-06-23 15:12:22 2022-03-09 15:08:14 eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyTmFtZSI6ImFkbWluIiwiZXhwIjoxNjUxODIzMDM2fQ.gMzPKaNlXEd1Q517qQamOpg358W9L0-0cZN3lkk06WE}}
-2022-05-05 15:43:56 [INFO] [github.com/apache/shenyu-client-golang/example/http_client/main.go:40] this is ShenYu Admin client token -> eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyTmFtZSI6ImFkbWluIiwiZXhwIjoxNjUxODIzMDM2fQ.gMzPKaNlXEd1Q517qQamOpg358W9L0-0cZN3lkk06WE
-2022-05-05 15:43:57 [INFO] [github.com/apache/shenyu-client-golang/example/http_client/main.go:55] finish register metadata ,the result is-> true
-2022-05-05 15:43:57 [INFO] [github.com/apache/shenyu-client-golang/example/http_client/main.go:70] finish UrlRegister ,the result is-> true
+2022-10-31 16:43:56 [INFO] [github.com/apache/shenyu-client-golang/clients/admin_client/shenyu_admin_client.go:51] Get ShenYu Http response, body is ->{Code:200 Message:login dashboard user success AdminTokenData:{ID:1 UserName:admin Role:1 Enabled:true DateCreated:2022-05-26 02:02:52 DateUpdated:2022-05-26 02:02:52 Token:eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyTmFtZSI6ImFkbWluIiwiZXhwIjoxNjY3MjkyMTAxfQ.x3kIz7xB-AuSuCWUHqpbDrhRA_pi-tj9lco7XUgNgGU}}
+2022-10-31 16:43:56 [INFO] [github.com/apache/shenyu-client-golang/example/http_client/main.go:40] Create customer http client success!
+2022-10-31 16:43:57 [INFO] [github.com/apache/shenyu-client-golang/example/http_client/main.go:55] finish register metadata ,the result is-> true
+2022-10-31 16:43:57 [INFO] [github.com/apache/shenyu-client-golang/example/http_client/main.go:70] finish UrlRegister ,the result is-> true
+
 
 ```

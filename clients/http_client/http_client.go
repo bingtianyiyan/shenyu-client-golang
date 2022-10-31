@@ -40,6 +40,7 @@ var (
  **/
 type ShenYuHttpClient struct {
 	Hcp *HttpClientParams
+	AccessTokens *sync.Map
 }
 
 /**
@@ -50,12 +51,6 @@ type HttpClientParams struct {
 	UserName string
 	Password string
 }
-/**
- accessTokens
-**/
-var (
-	accessTokens *sync.Map
-)
 
 /**
  * NewClient
@@ -68,13 +63,14 @@ func (hcc *ShenYuHttpClient) NewClient(clientParam interface{}) (client interfac
 	if len(acp.ServerList) == 0{
 		logger.Fatalf("The clientParam ServerList must not nil!")
 	}
-	accessTokens = new(sync.Map)
+	var accessTokens = new(sync.Map)
 	//token handler
 	for _,address := range acp.ServerList{
-		var err = hcc.setAccessToken(acp.UserName,acp.Password,address)
+		var err,token = hcc.setAccessToken(acp.UserName,acp.Password,address)
 		if err != nil{
 			logger.Fatalf("init http client error,setAccessToken err %+v:", err)
 		}
+		accessTokens.Store(address,token)
 	}
 	logger.Infof("Create customer http client success!")
 	return &ShenYuHttpClient{
@@ -83,6 +79,7 @@ func (hcc *ShenYuHttpClient) NewClient(clientParam interface{}) (client interfac
 			UserName: acp.UserName,
 			Password: acp.Password,
 		},
+		AccessTokens: accessTokens,
 	},true,nil
 }
 
@@ -179,7 +176,7 @@ func(hcc *ShenYuHttpClient) urlRegister(urlMetaData *model.URIRegister) (registe
 /*
 setAccessToken
 */
-func (hcc *ShenYuHttpClient) setAccessToken(userName string,password string,server string ) error{
+func (hcc *ShenYuHttpClient) setAccessToken(userName string,password string,server string ) (error,string){
 	headers := map[string][]string{}
 	headers[constants.DEFAULT_CONNECTION] = []string{constants.DEFAULT_CONNECTION_VALUE}
 	headers[constants.DEFAULT_CONTENT_TYPE] = []string{constants.DEFAULT_CONTENT_TYPE_VALUE}
@@ -205,14 +202,16 @@ func (hcc *ShenYuHttpClient) setAccessToken(userName string,password string,serv
 	var token, err = getShenYuHttpToken(tokenRequest)
 	if err != nil{
 		logger.Errorf("get token fail")
-		return err
+		return err,""
 	}
 	if token == ""{
 		logger.Errorf("get token fail,is empty %+v",err)
-		return errors.New("get token is empty")
+		return errors.New("get token is empty"),""
 	}
-	accessTokens.Store(server,token)
-	return nil
+	if hcc.AccessTokens != nil{
+		hcc.AccessTokens.Store(server,token)
+	}
+	return nil,token
 }
 
 /**
@@ -250,16 +249,16 @@ DoRegister
 func (hcc *ShenYuHttpClient) doRegister(params map[string]string,path string,bzType string) (result bool, err error){
 	for _,server := range hcc.Hcp.ServerList {
 		var token string
-		var tokenStr, ok = accessTokens.Load(server)
+		var tokenStr, ok = hcc.AccessTokens.Load(server)
 		if ok {
 			token = tokenStr.(string)
 		} else {
 			//set token again,if err return
-			err = hcc.setAccessToken(hcc.Hcp.UserName,hcc.Hcp.Password,server)
+			err,token = hcc.setAccessToken(hcc.Hcp.UserName,hcc.Hcp.Password,server)
 			if err != nil {
 				logger.Fatalf("request access token err %+v",err)
 			}
-			tokenStr, ok = accessTokens.Load(server)
+			tokenStr, ok = hcc.AccessTokens.Load(server)
 			if ok {
 				token = tokenStr.(string)
 			}else {

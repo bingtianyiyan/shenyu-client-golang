@@ -77,7 +77,7 @@ func main() {
 		Host:        "127.0.0.1",            //require user provide
 		Port:        "8080",                 //require user provide
 	}
-	result, err = hcc.PersistInterface(urlRegister)
+	result, err = hcc.PersistURI(urlRegister)
 	if err != nil {
 		logger.Warnf("UrlRegister has error:%+v", err)
 	}
